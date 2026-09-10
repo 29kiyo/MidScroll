@@ -3,6 +3,7 @@ bin/
 obj/
 *.user
 .vs/
+docs/
 
 ## Publish output
 publish/
