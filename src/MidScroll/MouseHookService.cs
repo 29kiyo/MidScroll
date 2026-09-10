@@ -67,6 +67,14 @@ namespace MidScroll
                     var hookStruct = System.Runtime.InteropServices.Marshal
                         .PtrToStructure<MSLLHOOKSTRUCT>(lParam);
 
+                    // SendInputで自分(または他プロセス)が注入したイベントは
+                    // 状態機械に通さず素通りさせる(無限ループ防止)
+                    bool isInjected = (hookStruct.flags & (LLMHF_INJECTED | LLMHF_LOWER_IL_INJECTED)) != 0;
+                    if (isInjected)
+                    {
+                        return CallNextHookEx(_hookHandle, nCode, wParam, lParam);
+                    }
+
                     var args = new MouseHookEventArgs(hookStruct.pt);
 
                     if (message == WM_MBUTTONDOWN)

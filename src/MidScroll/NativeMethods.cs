@@ -9,6 +9,10 @@ namespace MidScroll
         public const int WM_MBUTTONDOWN = 0x0207;
         public const int WM_MBUTTONUP = 0x0208;
 
+        // SendInput等で注入されたイベントかどうかを示すフラグ(MSLLHOOKSTRUCT.flags用)
+        public const uint LLMHF_INJECTED = 0x00000001;
+        public const uint LLMHF_LOWER_IL_INJECTED = 0x00000002;
+
         public const uint INPUT_MOUSE = 0;
         public const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
         public const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
