@@ -24,8 +24,19 @@ namespace MidScroll
 
             _hookService.Start();
 
+            var antiCheatGuard = new AntiCheatGuard();
+            antiCheatGuard.BlockStateChanged += (s, blocked) =>
+            {
+                _scrollEngine?.SetExternalBlock(blocked);
+                Console.WriteLine(blocked
+                    ? "[AntiCheatGuard] 対象ゲーム/アンチチートを検知。MidScrollを一時停止します。"
+                    : "[AntiCheatGuard] 対象ゲームの終了を検知。MidScrollを再開します。");
+            };
+            antiCheatGuard.Start();
+
             Application.ApplicationExit += (s, e) =>
             {
+                antiCheatGuard.Dispose();
                 _scrollEngine?.Dispose();
                 _hookService?.Dispose();
             };

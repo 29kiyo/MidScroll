@@ -23,6 +23,7 @@ namespace MidScroll
         private double _wheelAccumulator;
         private bool _suppressNextUp;
         private readonly ScrollCursorManager _cursorManager = new ScrollCursorManager();
+        private bool _externallyBlocked;
 
         public event EventHandler<string>? StatusChanged;
 
@@ -43,6 +44,8 @@ namespace MidScroll
 
         private void OnMiddleButtonDown(object? sender, MouseHookEventArgs e)
         {
+            if (_externallyBlocked) return; // アンチチート対象検知中は素通り
+
             switch (_state)
             {
                 case State.Idle:
@@ -68,6 +71,8 @@ namespace MidScroll
 
         private void OnMiddleButtonUp(object? sender, MouseHookEventArgs e)
         {
+            if (_externallyBlocked) return; // アンチチート対象検知中は素通り
+
             switch (_state)
             {
                 case State.Idle:
@@ -143,6 +148,32 @@ namespace MidScroll
                 int notch = _wheelAccumulator > 0 ? wheelDelta : -wheelDelta;
                 SendWheel(notch);
                 _wheelAccumulator -= notch;
+            }
+        }
+
+        // アンチチート対象ゲーム/サービスの検知状態が変わったときに呼ばれる。
+        // ブロック開始時は進行中のモードを強制的に終了し、以後の入力を素通りさせる。
+        public void SetExternalBlock(bool blocked)
+        {
+            if (_externallyBlocked == blocked) return;
+            _externallyBlocked = blocked;
+
+            if (blocked)
+            {
+                if (_state == State.ScrollActive)
+                {
+                    EndScrollMode();
+                }
+                else if (_state == State.PressPending)
+                {
+                    _pressTimer.Stop();
+                    _state = State.Idle;
+                }
+                Log("アンチチート対象ゲーム/サービスを検知。MidScrollを一時停止します。");
+            }
+            else
+            {
+                Log("アンチチート対象ゲーム/サービスの終了を検知。MidScrollを再開します。");
             }
         }
 
