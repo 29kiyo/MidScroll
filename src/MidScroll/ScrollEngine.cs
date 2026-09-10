@@ -22,6 +22,7 @@ namespace MidScroll
         private POINT _origin;
         private double _wheelAccumulator;
         private bool _suppressNextUp;
+        private readonly ScrollCursorManager _cursorManager = new ScrollCursorManager();
 
         public event EventHandler<string>? StatusChanged;
 
@@ -99,6 +100,7 @@ namespace MidScroll
 
             _state = State.ScrollActive;
             _wheelAccumulator = 0;
+            _cursorManager.Begin();
             _pollTimer.Start();
             Log("長押し確定。スクロールモード開始。");
         }
@@ -111,7 +113,13 @@ namespace MidScroll
             int dy = current.Y - _origin.Y;
             int absDy = Math.Abs(dy);
 
-            if (absDy <= _settings.DeadZonePixels) return;
+            if (absDy <= _settings.DeadZonePixels)
+            {
+                _cursorManager.Update(ScrollCursorState.Neutral);
+                return;
+            }
+
+            _cursorManager.Update(dy < 0 ? ScrollCursorState.Up : ScrollCursorState.Down);
 
             int effective = absDy - _settings.DeadZonePixels;
             double t = Math.Min(1.0, (double)effective / _settings.MaxSpeedRangePixels);
@@ -142,6 +150,7 @@ namespace MidScroll
         {
             _pollTimer.Stop();
             _wheelAccumulator = 0;
+            _cursorManager.End();
             _state = State.Idle;
         }
 
@@ -170,6 +179,7 @@ namespace MidScroll
 
         public void Dispose()
         {
+            _cursorManager.End();
             _pressTimer.Stop();
             _pressTimer.Dispose();
             _pollTimer.Stop();

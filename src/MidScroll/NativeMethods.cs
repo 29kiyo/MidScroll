@@ -13,6 +13,19 @@ namespace MidScroll
         public const uint LLMHF_INJECTED = 0x00000001;
         public const uint LLMHF_LOWER_IL_INJECTED = 0x00000002;
 
+        // システムカーソル一時差し替え用
+        public const uint OCR_NORMAL = 32512;
+        public const uint SPI_SETCURSORS = 0x0057;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SetSystemCursor(IntPtr hcur, uint id);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr CopyIcon(IntPtr hIcon);
+
         public const uint INPUT_MOUSE = 0;
         public const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
         public const uint MOUSEEVENTF_MIDDLEUP = 0x0040;

@@ -30,6 +30,12 @@ namespace MidScroll
                 _hookService?.Dispose();
             };
 
+            // 異常終了時でもシステムカーソルの差し替えが残らないようにする保険
+            AppDomain.CurrentDomain.ProcessExit += (s, e) =>
+            {
+                NativeMethods.SystemParametersInfo(NativeMethods.SPI_SETCURSORS, 0, IntPtr.Zero, 0);
+            };
+
             Application.Run();
         }
     }
