@@ -1,0 +1,16 @@
+## .NET
+bin/
+obj/
+*.user
+.vs/
+
+## Publish output
+publish/
+*.zip
+
+## Installer build output
+installer/Output/
+
+## OS
+Thumbs.db
+.DS_Store
