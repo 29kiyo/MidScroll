@@ -1,53 +1,40 @@
 using System;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace MidScroll
 {
     internal static class Program
     {
-        private static MouseHookService? _hookService;
-        private static ScrollEngine? _scrollEngine;
+        private const string MutexName = "MidScroll_SingleInstance_Mutex";
 
         [STAThread]
         static void Main()
         {
+            using var mutex = new Mutex(true, MutexName, out bool createdNew);
+            if (!createdNew)
+            {
+                MessageBox.Show("MidScrollは既に起動しています。", "MidScroll",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
             ApplicationConfiguration.Initialize();
 
-            Console.WriteLine("MidScroll フェーズ2 動作確認モード");
-            Console.WriteLine("中クリックを長押ししてスクロールモードをテストしてください。");
-            Console.WriteLine("終了するにはこのウィンドウを閉じてください。");
+            var settings = AppSettings.Load();
 
-            var settings = AppSettings.Default;
-            _hookService = new MouseHookService();
-            _scrollEngine = new ScrollEngine(_hookService, settings);
-            _scrollEngine.StatusChanged += (s, msg) => Console.WriteLine($"[ScrollEngine] {msg}");
+            using var hookService = new MouseHookService();
+            using var scrollEngine = new ScrollEngine(hookService, settings);
+            using var antiCheatGuard = new AntiCheatGuard();
 
-            _hookService.Start();
+            using var trayContext = new TrayApplicationContext(settings, scrollEngine, antiCheatGuard);
 
-            var antiCheatGuard = new AntiCheatGuard();
-            antiCheatGuard.BlockStateChanged += (s, blocked) =>
-            {
-                _scrollEngine?.SetExternalBlock(blocked);
-                Console.WriteLine(blocked
-                    ? "[AntiCheatGuard] 対象ゲーム/アンチチートを検知。MidScrollを一時停止します。"
-                    : "[AntiCheatGuard] 対象ゲームの終了を検知。MidScrollを再開します。");
-            };
+            hookService.Start();
             antiCheatGuard.Start();
 
-            Application.ApplicationExit += (s, e) =>
-            {
-                antiCheatGuard.Dispose();
-                _scrollEngine?.Dispose();
-                _hookService?.Dispose();
-            };
+            Application.Run(trayContext);
 
-            // 異常終了時でもシステムカーソルの差し替えが残らないようにする保険
-            AppDomain.CurrentDomain.ProcessExit += (s, e) =>
-            {
-                NativeMethods.SystemParametersInfo(NativeMethods.SPI_SETCURSORS, 0, IntPtr.Zero, 0);
-            };
-
-            Application.Run();
+            GC.KeepAlive(mutex);
         }
     }
 }

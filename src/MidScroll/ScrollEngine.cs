@@ -153,6 +153,13 @@ namespace MidScroll
 
         // アンチチート対象ゲーム/サービスの検知状態が変わったときに呼ばれる。
         // ブロック開始時は進行中のモードを強制的に終了し、以後の入力を素通りさせる。
+        // フェーズ3: 設定画面でLongPressThresholdMsを変更した際、
+        // 稼働中の_pressTimerへ即座に反映するための公開メソッド。
+        public void ApplyLongPressThreshold()
+        {
+            _pressTimer.Interval = _settings.LongPressThresholdMs;
+        }
+
         public void SetExternalBlock(bool blocked)
         {
             if (_externallyBlocked == blocked) return;
