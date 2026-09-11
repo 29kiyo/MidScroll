@@ -1,0 +1,101 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'リリースバージョン (例: v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  PROJECT_PATH: src/MidScroll/MidScroll.csproj
+  PUBLISH_DIR: publish/win-x64
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate version input and set env vars
+        shell: pwsh
+        run: |
+          $version = "${{ inputs.version }}"
+          if ($version -notmatch '^v\d+\.\d+\.\d+$') {
+            Write-Error "version は vX.Y.Z 形式で指定してください (入力値: $version)"
+            exit 1
+          }
+          $numVersion = $version.TrimStart('v')
+          Add-Content -Path $env:GITHUB_ENV -Value "VERSION=$version"
+          Add-Content -Path $env:GITHUB_ENV -Value "NUM_VERSION=$numVersion"
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # 注意: WinFormsはPublishTrimmedを公式サポートしておらず、
+      # dotnet publishに -p:PublishTrimmed=true を付けると
+      # NETSDK1175 でビルドエラーになることを実機検証済み。
+      # そのためトリミングは行わず、ReadyToRun + SingleFileのみを使用する。
+      - name: dotnet publish (self-contained / win-x64 / ReadyToRun / single file)
+        shell: pwsh
+        run: |
+          dotnet publish "${{ env.PROJECT_PATH }}" `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:PublishReadyToRun=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=none `
+            -p:Version=$env:NUM_VERSION `
+            -p:FileVersion=$env:NUM_VERSION `
+            -p:InformationalVersion=$env:VERSION `
+            -o "${{ env.PUBLISH_DIR }}"
+
+      - name: Create zip archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $zipName = "MidScroll-$env:VERSION-win-x64.zip"
+          Compress-Archive -Path "${{ env.PUBLISH_DIR }}\*" -DestinationPath "dist\$zipName" -Force
+          Add-Content -Path $env:GITHUB_ENV -Value "ZIP_NAME=$zipName"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Build installer with Inno Setup
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $publishDirFull = (Resolve-Path "${{ env.PUBLISH_DIR }}").Path
+          $outputDirFull = (Resolve-Path "dist").Path
+          & $iscc `
+            "/DMyAppVersion=$env:VERSION" `
+            "/DPublishDir=$publishDirFull" `
+            "/DOutputDir=$outputDirFull" `
+            "installer\installer.iss"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "ISCC.exe がエラー終了しました (exit code: $LASTEXITCODE)"
+            exit 1
+          }
+
+      - name: List dist contents
+        shell: pwsh
+        run: Get-ChildItem dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: MidScroll ${{ env.VERSION }}
+          files: |
+            dist/*.zip
+            dist/*.exe
