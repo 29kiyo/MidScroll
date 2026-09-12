@@ -21,6 +21,7 @@
 AppId={{4B9B6E7C-2B0E-4B7B-9C4E-4B9B6E7C2B0E}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppMutex={#MyAppMutex}
 DefaultDirName={autopf}\{#MyAppName}

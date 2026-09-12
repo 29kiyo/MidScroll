@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.Windows.Forms;
 
 namespace MidScroll
@@ -26,8 +27,8 @@ namespace MidScroll
             _scrollEngine = scrollEngine;
             _antiCheatGuard = antiCheatGuard;
 
-            _normalIcon = CreateDotIcon(Color.DodgerBlue);
-            _pausedIcon = CreateDotIcon(Color.Gray);
+            _normalIcon = LoadAppIcon();
+            _pausedIcon = CreateGrayscaleIcon(_normalIcon);
 
             var settingsMenuItem = new ToolStripMenuItem("設定を開く...", null, OnOpenSettings);
 
@@ -148,18 +149,59 @@ namespace MidScroll
             Application.Exit();
         }
 
-        private static Icon CreateDotIcon(Color color)
+        /// <summary>
+        /// exeに埋め込まれたアイコン(ApplicationIconで指定したicon.ico)を読み込む。
+        /// 取得に失敗した場合はシステム標準アイコンにフォールバックする。
+        /// </summary>
+        private static Icon LoadAppIcon()
         {
-            using var bitmap = new Bitmap(16, 16);
-            using (var g = Graphics.FromImage(bitmap))
+            try
             {
-                g.Clear(Color.Transparent);
-                using var brush = new SolidBrush(color);
-                g.FillEllipse(brush, 1, 1, 14, 14);
-                using var pen = new Pen(Color.White, 1);
-                g.DrawEllipse(pen, 1, 1, 14, 14);
+                using var extracted = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                if (extracted != null)
+                {
+                    return (Icon)extracted.Clone();
+                }
             }
-            return Icon.FromHandle(bitmap.GetHicon());
+            catch
+            {
+                // フォールバックへ
+            }
+
+            return SystemIcons.Application;
+        }
+
+        /// <summary>
+        /// 一時停止中/無効時に表示する、元アイコンのグレースケール版を生成する。
+        /// </summary>
+        private static Icon CreateGrayscaleIcon(Icon source)
+        {
+            using var original = source.ToBitmap();
+            using var grayscale = new Bitmap(original.Width, original.Height);
+
+            using (var g = Graphics.FromImage(grayscale))
+            {
+                var colorMatrix = new ColorMatrix(new float[][]
+                {
+                    new float[] { 0.3f, 0.3f, 0.3f, 0, 0 },
+                    new float[] { 0.59f, 0.59f, 0.59f, 0, 0 },
+                    new float[] { 0.11f, 0.11f, 0.11f, 0, 0 },
+                    new float[] { 0, 0, 0, 1, 0 },
+                    new float[] { 0, 0, 0, 0, 1 }
+                });
+
+                using var attributes = new ImageAttributes();
+                attributes.SetColorMatrix(colorMatrix);
+
+                g.DrawImage(
+                    original,
+                    new Rectangle(0, 0, original.Width, original.Height),
+                    0, 0, original.Width, original.Height,
+                    GraphicsUnit.Pixel,
+                    attributes);
+            }
+
+            return Icon.FromHandle(grayscale.GetHicon());
         }
     }
 }
