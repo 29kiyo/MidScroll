@@ -1,5 +1,13 @@
 # MidScroll
 
+![Downloads](https://img.shields.io/github/downloads/29kiyo/Midscroll/total?style=flat-square&label=Downloads&color=4c1)
+![Latest Release](https://img.shields.io/github/v/release/29kiyo/Midscroll?style=flat-square&label=Latest)
+![License](https://img.shields.io/github/license/29kiyo/Midscroll?style=flat-square)
+![Build](https://img.shields.io/github/actions/workflow/status/29kiyo/Midscroll/build.yml?style=flat-square&label=Build)
+![Last Commit](https://img.shields.io/github/last-commit/29kiyo/Midscroll?style=flat-square&label=Last+Commit)
+![Release Date](https://img.shields.io/github/release-date/29kiyo/Midscroll?style=flat-square&label=Released)
+![Platform](https://img.shields.io/badge/platform-Windows-blue?style=flat-square)
+
 Windows用の中クリック長押しオートスクロールユーティリティです。
 中クリック(マウスホイールクリック)を長押しすると、その時点のカーソル位置を起点として
 オートスクロールモードに入ります。起点から上下にカーソルを動かすと、その距離に応じた
