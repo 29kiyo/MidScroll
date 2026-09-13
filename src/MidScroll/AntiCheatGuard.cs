@@ -5,49 +5,26 @@ using System.Windows.Forms;
 
 namespace MidScroll
 {
-    // 主要なアンチチートサービス、および代表的な対象ゲーム本体の実行を
-    // 定期的に検知し、検知中はMidScrollの機能を自動的に一時停止する。
-    // 監視対象プロセス名は今後の変化に応じて随時更新すること。
+    // 2つの独立した検知機能を持つ:
+    //   1. アンチチート検知(AppSettings.AntiCheatDetectionEnabled / AntiCheatProcessNames)
+    //      主要アンチチートサービス・代表的な対象ゲーム本体の実行を検知する。
+    //      監視対象リストは設定画面で編集可能(既定値はAppSettings側で定義)。
+    //   2. カスタムアプリ無効化(AppSettings.CustomBlockEnabled / CustomBlockedProcessNames)
+    //      ユーザーが任意に指定した実行ファイルの実行を検知する。
+    // 各リストの項目(ProcessRule)はそれぞれ個別にEnabled/Disabledを持ち、
+    // 機能全体のトグルとは別に項目単位でも無視できる。
+    // どちらかの機能・項目で検知されればMidScrollを一時停止する。
     internal sealed class AntiCheatGuard : IDisposable
     {
-        // プロセス名(拡張子なし、大文字小文字区別なし)
-        private static readonly HashSet<string> WatchedProcessNames = new(StringComparer.OrdinalIgnoreCase)
-        {
-            // Easy Anti-Cheat (Fortnite, Apex Legendsほか多数のタイトルで採用)
-            "easyanticheat",
-            "easyanticheat_eos",
-            "eastart",
-
-            // BattlEye (PUBG, Rainbow Six Siegeほか)
-            "beservice",
-            "bedaemon",
-            "battleye",
-
-            // Riot Vanguard (Valorant)。PC起動時から常駐するため、
-            // インストールされている環境ではゲーム未起動時も検知され続ける点に注意。
-            "vgc",
-            "vgtray",
-            "vgk",
-
-            // nProtect GameGuard
-            "gamemon",
-            "npggsvc",
-
-            // 代表的な対象ゲーム本体(アンチチートサービスの検知漏れに対する補助)
-            "fortniteclient-win64-shipping",
-            "r5apex",                    // Apex Legends
-            "tslgame",                   // PUBG: BATTLEGROUNDS
-            "rainbowsix",                // Rainbow Six Siege
-            "valorant-win64-shipping",
-        };
-
+        private readonly AppSettings _settings;
         private readonly System.Windows.Forms.Timer _pollTimer;
         private bool _isBlocked;
 
         public event EventHandler<bool>? BlockStateChanged;
 
-        public AntiCheatGuard(int pollIntervalMs = 3000)
+        public AntiCheatGuard(AppSettings settings, int pollIntervalMs = 3000)
         {
+            _settings = settings;
             _pollTimer = new System.Windows.Forms.Timer { Interval = pollIntervalMs };
             _pollTimer.Tick += (s, e) => Poll();
         }
@@ -60,6 +37,10 @@ namespace MidScroll
 
         public void Stop() => _pollTimer.Stop();
 
+        // 設定画面での変更直後など、次の定期ポーリング(既定3秒間隔)を待たずに
+        // 即座に検知状態を再評価したい場合に呼ぶ。
+        public void ForceRecheck() => Poll();
+
         private void Poll()
         {
             bool detected = IsAnyWatchedProcessRunning();
@@ -69,15 +50,31 @@ namespace MidScroll
             BlockStateChanged?.Invoke(this, _isBlocked);
         }
 
-        private static bool IsAnyWatchedProcessRunning()
+        private bool IsAnyWatchedProcessRunning()
         {
+            // 各リスト・トグルは毎回_settingsから読み直す
+            // (設定画面での変更をアプリ再起動なしに反映するため)。
+            HashSet<string>? antiCheatNames = _settings.AntiCheatDetectionEnabled
+                ? BuildNameSet(_settings.AntiCheatProcessNames)
+                : null;
+            HashSet<string>? customNames = _settings.CustomBlockEnabled
+                ? BuildNameSet(_settings.CustomBlockedProcessNames)
+                : null;
+
+            bool anyListActive = (antiCheatNames != null && antiCheatNames.Count > 0)
+                || (customNames != null && customNames.Count > 0);
+            if (!anyListActive) return false;
+
             foreach (var process in Process.GetProcesses())
             {
                 using (process)
                 {
                     try
                     {
-                        if (WatchedProcessNames.Contains(process.ProcessName))
+                        bool matchesAntiCheat = antiCheatNames != null && antiCheatNames.Contains(process.ProcessName);
+                        bool matchesCustom = customNames != null && customNames.Contains(process.ProcessName);
+
+                        if (matchesAntiCheat || matchesCustom)
                         {
                             return true;
                         }
@@ -89,6 +86,30 @@ namespace MidScroll
                 }
             }
             return false;
+        }
+
+        // 項目ごとにEnabled=falseのものは除外し、有効な項目だけを
+        // Process.ProcessName相当の形式(拡張子なし)に正規化して集合化する。
+        private static HashSet<string> BuildNameSet(IEnumerable<ProcessRule> rules)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var rule in rules)
+            {
+                if (!rule.Enabled) continue;
+                if (string.IsNullOrWhiteSpace(rule.Name)) continue;
+
+                string name = rule.Name.Trim();
+                if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    name = name[..^4];
+                }
+
+                if (name.Length > 0)
+                {
+                    set.Add(name);
+                }
+            }
+            return set;
         }
 
         public void Dispose()

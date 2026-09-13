@@ -25,7 +25,7 @@ namespace MidScroll
 
             using var hookService = new MouseHookService();
             using var scrollEngine = new ScrollEngine(hookService, settings);
-            using var antiCheatGuard = new AntiCheatGuard();
+            using var antiCheatGuard = new AntiCheatGuard(settings);
 
             using var trayContext = new TrayApplicationContext(settings, scrollEngine, antiCheatGuard);
 

@@ -138,6 +138,11 @@ namespace MidScroll
                 // LongPressThresholdMs以外(DeadZone等)は_settingsを毎ティック直接
                 // 参照しているため自動で反映される。閾値だけは明示的な反映が必要。
                 _scrollEngine.ApplyLongPressThreshold();
+
+                // アンチチート/カスタム無効化リストの変更(トグルON→OFFなど)を、
+                // 次の定期ポーリング(既定3秒間隔)を待たずに即座に反映する。
+                _antiCheatGuard.ForceRecheck();
+
                 ApplyEffectiveBlockState();
             }
         }
@@ -151,25 +156,10 @@ namespace MidScroll
 
         /// <summary>
         /// exeに埋め込まれたアイコン(ApplicationIconで指定したicon.ico)を読み込む。
-        /// 取得に失敗した場合はシステム標準アイコンにフォールバックする。
+        /// 実体はAppIconProviderに共通化(SettingsFormのタイトルバー/タスクバー
+        /// アイコンにも同じ処理を使う)。
         /// </summary>
-        private static Icon LoadAppIcon()
-        {
-            try
-            {
-                using var extracted = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-                if (extracted != null)
-                {
-                    return (Icon)extracted.Clone();
-                }
-            }
-            catch
-            {
-                // フォールバックへ
-            }
-
-            return SystemIcons.Application;
-        }
+        private static Icon LoadAppIcon() => AppIconProvider.GetIcon();
 
         /// <summary>
         /// 一時停止中/無効時に表示する、元アイコンのグレースケール版を生成する。
