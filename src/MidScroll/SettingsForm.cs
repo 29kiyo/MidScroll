@@ -59,7 +59,8 @@ namespace MidScroll
                 "アンチチート検知",
                 "アンチチート検知を有効にする",
                 out _antiCheatEnabledCheckBox,
-                out _antiCheatListView));
+                out _antiCheatListView,
+                AppSettings.CreateDefaultAntiCheatRules));
             tabControl.TabPages.Add(BuildProcessListTab(
                 "カスタム無効化アプリ",
                 "指定したアプリで無効化する",
@@ -167,7 +168,8 @@ namespace MidScroll
             string tabTitle,
             string enableCheckboxText,
             out CheckBox enabledCheckBox,
-            out ListView listView)
+            out ListView listView,
+            Func<List<ProcessRule>>? defaultsProvider = null)
         {
             var page = new TabPage(tabTitle);
 
@@ -279,6 +281,30 @@ namespace MidScroll
             page.Controls.Add(addButton);
             page.Controls.Add(browseButton);
             page.Controls.Add(removeButton);
+
+            if (defaultsProvider != null)
+            {
+                var resetButton = new Button
+                {
+                    Text = "既定に戻す",
+                    Location = new Point(140, 280),
+                    Width = 120
+                };
+                resetButton.Click += (s, e) =>
+                {
+                    var answer = MessageBox.Show(
+                        this,
+                        "一覧を既定の内容に戻します。\n追加した項目や個別のON/OFFの設定は失われます。\n(「保存」を押すまで確定しません)\n\nよろしいですか?",
+                        "既定に戻す",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Question);
+                    if (answer == DialogResult.Yes)
+                    {
+                        PopulateListView(list, defaultsProvider());
+                    }
+                };
+                page.Controls.Add(resetButton);
+            }
 
             enabledCheckBox = checkBox;
             listView = list;

@@ -40,7 +40,7 @@ namespace MidScroll
             "valorant-win64-shipping",
         };
 
-        private static List<ProcessRule> CreateDefaultAntiCheatRules() =>
+        public static List<ProcessRule> CreateDefaultAntiCheatRules() =>
             DefaultAntiCheatProcessNames
                 .Select(name => new ProcessRule { Name = name, Enabled = true })
                 .ToList();
