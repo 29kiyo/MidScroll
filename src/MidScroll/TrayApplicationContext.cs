@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace MidScroll
@@ -19,7 +21,7 @@ namespace MidScroll
         private readonly Icon _normalIcon;
         private readonly Icon _pausedIcon;
 
-        private bool _antiCheatBlocked;
+        private BlockCause? _blockCause;
 
         public TrayApplicationContext(AppSettings settings, ScrollEngine scrollEngine, AntiCheatGuard antiCheatGuard)
         {
@@ -76,15 +78,15 @@ namespace MidScroll
             ApplyEffectiveBlockState();
         }
 
-        private void OnAntiCheatBlockStateChanged(object? sender, bool blocked)
+        private void OnAntiCheatBlockStateChanged(object? sender, BlockCause? cause)
         {
-            _antiCheatBlocked = blocked;
+            _blockCause = cause;
             ApplyEffectiveBlockState();
         }
 
         private void ApplyEffectiveBlockState()
         {
-            bool shouldBlock = !_settings.Enabled || _antiCheatBlocked;
+            bool shouldBlock = !_settings.Enabled || _blockCause != null;
             _scrollEngine.SetExternalBlock(shouldBlock);
             UpdateStatusDisplay(shouldBlock);
         }
@@ -98,9 +100,9 @@ namespace MidScroll
                 _statusMenuItem.Text = "状態: 無効(手動)";
                 _trayIcon.Text = "MidScroll (無効)";
             }
-            else if (_antiCheatBlocked)
+            else if (_blockCause is { } cause)
             {
-                _statusMenuItem.Text = "状態: 一時停止中(アンチチート検知)";
+                _statusMenuItem.Text = "状態: 一時停止中(" + FormatCause(cause) + ")";
                 _trayIcon.Text = "MidScroll (一時停止中)";
             }
             else
@@ -108,6 +110,31 @@ namespace MidScroll
                 _statusMenuItem.Text = "状態: 通常";
                 _trayIcon.Text = "MidScroll";
             }
+        }
+
+        // 一時停止の原因を「アンチチート: vgc, vgtray / 指定アプリ: notepad」の形式に整形する。
+        // 種類ごとに2件まで表示し、超える分は「ほかN件」にまとめる。
+        private static string FormatCause(BlockCause cause)
+        {
+            var parts = new List<string>();
+            if (cause.AntiCheat.Count > 0)
+            {
+                parts.Add("アンチチート: " + Summarize(cause.AntiCheat));
+            }
+            if (cause.Custom.Count > 0)
+            {
+                parts.Add("指定アプリ: " + Summarize(cause.Custom));
+            }
+            return string.Join(" / ", parts);
+        }
+
+        private static string Summarize(IReadOnlyList<string> names)
+        {
+            const int maxShown = 2;
+            string head = string.Join(", ", names.Take(maxShown));
+            return names.Count > maxShown
+                ? $"{head} ほか{names.Count - maxShown}件"
+                : head;
         }
 
         private void OnToggleEnabled(object? sender, EventArgs e)
