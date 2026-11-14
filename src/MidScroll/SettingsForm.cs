@@ -16,12 +16,19 @@ namespace MidScroll
         private ComboBox _thresholdUnitComboBox = null!;
         private NumericUpDown _speedNumeric = null!;
         private CheckBox _autoStartCheckBox = null!;
+        private CheckBox _pageKeyScrollCheckBox = null!;
+        private NumericUpDown _pageKeyNotchesNumeric = null!;
+        private CheckBox _holdScrollCheckBox = null!;
 
         private CheckBox _antiCheatEnabledCheckBox = null!;
         private ListView _antiCheatListView = null!;
 
         private CheckBox _customBlockEnabledCheckBox = null!;
         private ListView _customBlockedListView = null!;
+
+        private CheckBox _customForegroundOnlyCheckBox = null!;
+        private CheckBox _allowedEnabledCheckBox = null!;
+        private ListView _allowedListView = null!;
 
         private Button _okButton = null!;
         private Button _cancelButton = null!;
@@ -61,11 +68,34 @@ namespace MidScroll
                 out _antiCheatEnabledCheckBox,
                 out _antiCheatListView,
                 AppSettings.CreateDefaultAntiCheatRules));
-            tabControl.TabPages.Add(BuildProcessListTab(
+            var customPage = BuildProcessListTab(
                 "カスタム無効化アプリ",
                 "指定したアプリで無効化する",
                 out _customBlockEnabledCheckBox,
-                out _customBlockedListView));
+                out _customBlockedListView);
+            _customForegroundOnlyCheckBox = new CheckBox
+            {
+                Text = "そのアプリが前面にあるときだけ無効化する(OFFなら、起動している間ずっと無効化)",
+                Location = new Point(12, 316),
+                AutoSize = false,
+                Size = new Size(350, 40)
+            };
+            customPage.Controls.Add(_customForegroundOnlyCheckBox);
+            tabControl.TabPages.Add(customPage);
+
+            var allowedPage = BuildProcessListTab(
+                "許可アプリ",
+                "指定したアプリが前面にあるときは一時停止しない",
+                out _allowedEnabledCheckBox,
+                out _allowedListView);
+            allowedPage.Controls.Add(new Label
+            {
+                Text = "※アンチチート検知・カスタム無効化より優先されます。登録したゲームでも動くため、そのゲームのアンチチートに検知されるリスク(アカウントBAN等)は自己責任になります。",
+                Location = new Point(12, 316),
+                Size = new Size(350, 50),
+                ForeColor = Color.Firebrick
+            });
+            tabControl.TabPages.Add(allowedPage);
 
             _okButton = new Button
             {
@@ -149,6 +179,55 @@ namespace MidScroll
                 AutoSize = true
             };
 
+            _pageKeyScrollCheckBox = new CheckBox
+            {
+                Text = "PageUp/PageDownでホイールスクロールする",
+                Location = new Point(12, 168),
+                AutoSize = true
+            };
+            _pageKeyScrollCheckBox.CheckedChanged += (s, e) =>
+                _pageKeyNotchesNumeric.Enabled = _pageKeyScrollCheckBox.Checked;
+
+            var pageKeyNotchesLabel = new Label
+            {
+                Text = "1回あたりのホイール回数:",
+                Location = new Point(32, 206),
+                AutoSize = true
+            };
+            _pageKeyNotchesNumeric = new NumericUpDown
+            {
+                Location = new Point(190, 202),
+                Width = 80,
+                Minimum = 1,
+                Maximum = 50,
+                Increment = 1,
+                DecimalPlaces = 0,
+                Value = 1
+            };
+
+            var pageKeyHintLabel = new Label
+            {
+                Text = "※Ctrl/Shift/Alt/Winキーとの同時押しは通常のキー動作になります",
+                Location = new Point(32, 236),
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText
+            };
+
+            _holdScrollCheckBox = new CheckBox
+            {
+                Text = "中クリック長押しでオートスクロールする",
+                Location = new Point(12, 270),
+                AutoSize = true
+            };
+
+            var holdScrollHintLabel = new Label
+            {
+                Text = "※OFFにすると、中クリックは常にそのまま他のアプリに伝わります",
+                Location = new Point(32, 296),
+                AutoSize = true,
+                ForeColor = SystemColors.GrayText
+            };
+
             page.Controls.Add(_enabledCheckBox);
             page.Controls.Add(thresholdLabel);
             page.Controls.Add(_thresholdNumeric);
@@ -156,6 +235,12 @@ namespace MidScroll
             page.Controls.Add(speedLabel);
             page.Controls.Add(_speedNumeric);
             page.Controls.Add(_autoStartCheckBox);
+            page.Controls.Add(_pageKeyScrollCheckBox);
+            page.Controls.Add(pageKeyNotchesLabel);
+            page.Controls.Add(_pageKeyNotchesNumeric);
+            page.Controls.Add(pageKeyHintLabel);
+            page.Controls.Add(_holdScrollCheckBox);
+            page.Controls.Add(holdScrollHintLabel);
 
             return page;
         }
@@ -250,7 +335,7 @@ namespace MidScroll
             {
                 using var dialog = new OpenFileDialog
                 {
-                    Title = "無効化対象の実行ファイルを選択",
+                    Title = "実行ファイルを選択",
                     Filter = "実行ファイル (*.exe)|*.exe|すべてのファイル (*.*)|*.*",
                     CheckFileExists = true
                 };
@@ -316,12 +401,21 @@ namespace MidScroll
             _enabledCheckBox.Checked = _settings.Enabled;
             _autoStartCheckBox.Checked = _settings.AutoStart;
             _speedNumeric.Value = (decimal)_settings.WheelSpeedMultiplier;
+            _pageKeyScrollCheckBox.Checked = _settings.PageKeyScrollEnabled;
+            _holdScrollCheckBox.Checked = _settings.MiddleHoldScrollEnabled;
+            _pageKeyNotchesNumeric.Value = Math.Min(_pageKeyNotchesNumeric.Maximum,
+                Math.Max(_pageKeyNotchesNumeric.Minimum, _settings.PageKeyScrollNotches));
+            _pageKeyNotchesNumeric.Enabled = _pageKeyScrollCheckBox.Checked;
 
             _antiCheatEnabledCheckBox.Checked = _settings.AntiCheatDetectionEnabled;
             PopulateListView(_antiCheatListView, _settings.AntiCheatProcessNames);
 
             _customBlockEnabledCheckBox.Checked = _settings.CustomBlockEnabled;
             PopulateListView(_customBlockedListView, _settings.CustomBlockedProcessNames);
+            _customForegroundOnlyCheckBox.Checked = _settings.CustomBlockForegroundOnly;
+
+            _allowedEnabledCheckBox.Checked = _settings.AllowedAppsEnabled;
+            PopulateListView(_allowedListView, _settings.AllowedProcessNames);
 
             _suppressUnitConversion = true;
             _thresholdUnitComboBox.SelectedIndex = UnitIndexMs;
@@ -407,6 +501,9 @@ namespace MidScroll
         {
             _settings.Enabled = _enabledCheckBox.Checked;
             _settings.WheelSpeedMultiplier = (double)_speedNumeric.Value;
+            _settings.PageKeyScrollEnabled = _pageKeyScrollCheckBox.Checked;
+            _settings.MiddleHoldScrollEnabled = _holdScrollCheckBox.Checked;
+            _settings.PageKeyScrollNotches = (int)_pageKeyNotchesNumeric.Value;
 
             _settings.LongPressThresholdMs = _thresholdUnitComboBox.SelectedIndex == UnitIndexSeconds
                 ? (int)Math.Round(_thresholdNumeric.Value * 1000m)
@@ -417,6 +514,10 @@ namespace MidScroll
 
             _settings.CustomBlockEnabled = _customBlockEnabledCheckBox.Checked;
             _settings.CustomBlockedProcessNames = ExtractRules(_customBlockedListView);
+            _settings.CustomBlockForegroundOnly = _customForegroundOnlyCheckBox.Checked;
+
+            _settings.AllowedAppsEnabled = _allowedEnabledCheckBox.Checked;
+            _settings.AllowedProcessNames = ExtractRules(_allowedListView);
 
             bool autoStartChanged = _settings.AutoStart != _autoStartCheckBox.Checked;
             _settings.AutoStart = _autoStartCheckBox.Checked;

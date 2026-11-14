@@ -77,7 +77,7 @@ namespace MidScroll
             HashSet<string>? antiCheatNames = _settings.AntiCheatDetectionEnabled
                 ? BuildNameSet(_settings.AntiCheatProcessNames)
                 : null;
-            HashSet<string>? customNames = _settings.CustomBlockEnabled
+            HashSet<string>? customNames = _settings.CustomBlockEnabled && !_settings.CustomBlockForegroundOnly
                 ? BuildNameSet(_settings.CustomBlockedProcessNames)
                 : null;
 
@@ -121,7 +121,7 @@ namespace MidScroll
 
         // 項目ごとにEnabled=falseのものは除外し、有効な項目だけを
         // Process.ProcessName相当の形式(拡張子なし)に正規化して集合化する。
-        private static HashSet<string> BuildNameSet(IEnumerable<ProcessRule> rules)
+        internal static HashSet<string> BuildNameSet(IEnumerable<ProcessRule> rules)
         {
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var rule in rules)

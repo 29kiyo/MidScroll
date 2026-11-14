@@ -22,6 +22,7 @@ namespace MidScroll
             ApplicationConfiguration.Initialize();
 
             var settings = AppSettings.Load();
+            DebugLog.Enabled = settings.DebugLogEnabled;
 
             using var hookService = new MouseHookService();
             using var scrollEngine = new ScrollEngine(hookService, settings);

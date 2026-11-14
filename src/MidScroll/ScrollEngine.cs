@@ -24,6 +24,7 @@ namespace MidScroll
         private bool _suppressNextUp;
         private readonly ScrollCursorManager _cursorManager = new ScrollCursorManager();
         private bool _externallyBlocked;
+        private readonly PageKeyScroller _pageKeyScroller;
 
         public event EventHandler<string>? StatusChanged;
 
@@ -40,11 +41,14 @@ namespace MidScroll
 
             _hookService.MiddleButtonDown += OnMiddleButtonDown;
             _hookService.MiddleButtonUp += OnMiddleButtonUp;
+
+            _pageKeyScroller = new PageKeyScroller(_settings);
+            _pageKeyScroller.Refresh();
         }
 
         private void OnMiddleButtonDown(object? sender, MouseHookEventArgs e)
         {
-            if (_externallyBlocked) return; // アンチチート対象検知中は素通り
+            if (_externallyBlocked || !_settings.MiddleHoldScrollEnabled) return; // 一時停止中・長押し機能OFF時は素通り
 
             switch (_state)
             {
@@ -71,7 +75,7 @@ namespace MidScroll
 
         private void OnMiddleButtonUp(object? sender, MouseHookEventArgs e)
         {
-            if (_externallyBlocked) return; // アンチチート対象検知中は素通り
+            if (_externallyBlocked || !_settings.MiddleHoldScrollEnabled) return; // 一時停止中・長押し機能OFF時は素通り
 
             switch (_state)
             {
@@ -160,10 +164,36 @@ namespace MidScroll
             _pressTimer.Interval = _settings.LongPressThresholdMs;
         }
 
+        // 設定画面でPageUp/PageDown機能のON/OFFが変わったときに、
+        // キーボードフックの設置/解除へ反映する。回数は押下のたびに読み直すため不要。
+        public void ApplyPageKeySettings()
+        {
+            _pageKeyScroller.Refresh();
+        }
+
+        // 中クリック長押し機能がOFFになったときに、進行中のスクロールモードや
+        // 長押し判定を終了させる(OFF後は中クリックが素通りになるため、
+        // モードが終われなくなるのを防ぐ)。
+        public void ApplyHoldScrollSetting()
+        {
+            if (_settings.MiddleHoldScrollEnabled) return;
+
+            if (_state == State.ScrollActive)
+            {
+                EndScrollMode();
+            }
+            else if (_state == State.PressPending)
+            {
+                _pressTimer.Stop();
+                _state = State.Idle;
+            }
+        }
+
         public void SetExternalBlock(bool blocked)
         {
             if (_externallyBlocked == blocked) return;
             _externallyBlocked = blocked;
+            _pageKeyScroller.SetBlocked(blocked);
 
             if (blocked)
             {
@@ -224,6 +254,7 @@ namespace MidScroll
             _pollTimer.Dispose();
             _hookService.MiddleButtonDown -= OnMiddleButtonDown;
             _hookService.MiddleButtonUp -= OnMiddleButtonUp;
+            _pageKeyScroller.Dispose();
         }
     }
 }

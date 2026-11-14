@@ -15,6 +15,8 @@ namespace MidScroll
         private readonly AntiCheatGuard _antiCheatGuard;
 
         private readonly ToolStripMenuItem _enabledMenuItem;
+        private readonly ToolStripMenuItem _holdScrollMenuItem;
+        private readonly ToolStripMenuItem _pageKeyMenuItem;
         private readonly ToolStripMenuItem _autoStartMenuItem;
         private readonly ToolStripMenuItem _statusMenuItem;
 
@@ -22,12 +24,15 @@ namespace MidScroll
         private readonly Icon _pausedIcon;
 
         private BlockCause? _blockCause;
+        private readonly ForegroundAllowGuard _allowGuard;
 
         public TrayApplicationContext(AppSettings settings, ScrollEngine scrollEngine, AntiCheatGuard antiCheatGuard)
         {
             _settings = settings;
             _scrollEngine = scrollEngine;
             _antiCheatGuard = antiCheatGuard;
+            _allowGuard = new ForegroundAllowGuard(_settings);
+            _allowGuard.AllowedStateChanged += OnAllowedStateChanged;
 
             _normalIcon = LoadAppIcon();
             _pausedIcon = CreateGrayscaleIcon(_normalIcon);
@@ -37,6 +42,16 @@ namespace MidScroll
             _enabledMenuItem = new ToolStripMenuItem("機能を有効にする", null, OnToggleEnabled)
             {
                 Checked = _settings.Enabled
+            };
+
+            _holdScrollMenuItem = new ToolStripMenuItem("中クリック長押しスクロール", null, OnToggleHoldScroll)
+            {
+                Checked = _settings.MiddleHoldScrollEnabled
+            };
+
+            _pageKeyMenuItem = new ToolStripMenuItem("PageUp/PageDownでホイールスクロール", null, OnTogglePageKey)
+            {
+                Checked = _settings.PageKeyScrollEnabled
             };
 
             _autoStartMenuItem = new ToolStripMenuItem("PC起動時に自動起動", null, OnToggleAutoStart)
@@ -55,6 +70,8 @@ namespace MidScroll
             contextMenu.Items.Add(settingsMenuItem);
             contextMenu.Items.Add(new ToolStripSeparator());
             contextMenu.Items.Add(_enabledMenuItem);
+            contextMenu.Items.Add(_holdScrollMenuItem);
+            contextMenu.Items.Add(_pageKeyMenuItem);
             contextMenu.Items.Add(_autoStartMenuItem);
             contextMenu.Items.Add(new ToolStripSeparator());
             contextMenu.Items.Add(_statusMenuItem);
@@ -74,7 +91,33 @@ namespace MidScroll
             // ここでBlockStateChangedを購読し、ユーザーのEnabled設定と合成して
             // SetExternalBlockに渡す(どちらか一方でもtrueなら一時停止)。
             _antiCheatGuard.BlockStateChanged += OnAntiCheatBlockStateChanged;
+            _allowGuard.Start();
 
+            ApplyEffectiveBlockState();
+        }
+
+        // 一時停止の原因があるか。次のどちらか:
+        //   - アンチチート検知(または、起動中のカスタム無効化アプリ)のBlockCause
+        //   - 前面にあるカスタム無効化アプリ(前面限定がONのとき)
+        private bool HasBlockCause =>
+            _blockCause != null || _allowGuard.ForegroundBlockedName.Length > 0;
+
+        private string DescribeCause()
+        {
+            var parts = new List<string>();
+            if (_blockCause is { } cause)
+            {
+                parts.Add(FormatCause(cause));
+            }
+            if (_allowGuard.ForegroundBlockedName.Length > 0)
+            {
+                parts.Add("指定アプリ(前面): " + _allowGuard.ForegroundBlockedName);
+            }
+            return string.Join(" / ", parts);
+        }
+
+        private void OnAllowedStateChanged(object? sender, bool allowed)
+        {
             ApplyEffectiveBlockState();
         }
 
@@ -86,7 +129,10 @@ namespace MidScroll
 
         private void ApplyEffectiveBlockState()
         {
-            bool shouldBlock = !_settings.Enabled || _blockCause != null;
+            bool paused = HasBlockCause && !_allowGuard.IsAllowed;
+            bool shouldBlock = !_settings.Enabled || paused;
+            string causeText = HasBlockCause ? DescribeCause() : "-";
+            DebugLog.Write($"[block] 有効={_settings.Enabled} 原因={causeText} 許可={_allowGuard.IsAllowed} 許可アプリ={_allowGuard.CurrentName} 停止={shouldBlock}");
             _scrollEngine.SetExternalBlock(shouldBlock);
             UpdateStatusDisplay(shouldBlock);
         }
@@ -100,9 +146,14 @@ namespace MidScroll
                 _statusMenuItem.Text = "状態: 無効(手動)";
                 _trayIcon.Text = "MidScroll (無効)";
             }
-            else if (_blockCause is { } cause)
+            else if (HasBlockCause && _allowGuard.IsAllowed)
             {
-                _statusMenuItem.Text = "状態: 一時停止中(" + FormatCause(cause) + ")";
+                _statusMenuItem.Text = "状態: 動作中(許可アプリ: " + _allowGuard.CurrentName + " が前面)";
+                _trayIcon.Text = "MidScroll (許可アプリで動作中)";
+            }
+            else if (HasBlockCause)
+            {
+                _statusMenuItem.Text = "状態: 一時停止中(" + DescribeCause() + ")";
                 _trayIcon.Text = "MidScroll (一時停止中)";
             }
             else
@@ -145,6 +196,22 @@ namespace MidScroll
             _settings.Save();
         }
 
+        private void OnTogglePageKey(object? sender, EventArgs e)
+        {
+            _settings.PageKeyScrollEnabled = !_settings.PageKeyScrollEnabled;
+            _pageKeyMenuItem.Checked = _settings.PageKeyScrollEnabled;
+            _scrollEngine.ApplyPageKeySettings();
+            _settings.Save();
+        }
+
+        private void OnToggleHoldScroll(object? sender, EventArgs e)
+        {
+            _settings.MiddleHoldScrollEnabled = !_settings.MiddleHoldScrollEnabled;
+            _holdScrollMenuItem.Checked = _settings.MiddleHoldScrollEnabled;
+            _scrollEngine.ApplyHoldScrollSetting();
+            _settings.Save();
+        }
+
         private void OnToggleAutoStart(object? sender, EventArgs e)
         {
             _settings.AutoStart = !_settings.AutoStart;
@@ -165,13 +232,27 @@ namespace MidScroll
                 // LongPressThresholdMs以外(DeadZone等)は_settingsを毎ティック直接
                 // 参照しているため自動で反映される。閾値だけは明示的な反映が必要。
                 _scrollEngine.ApplyLongPressThreshold();
+                _scrollEngine.ApplyPageKeySettings();
+                _pageKeyMenuItem.Checked = _settings.PageKeyScrollEnabled;
+                _holdScrollMenuItem.Checked = _settings.MiddleHoldScrollEnabled;
+                _scrollEngine.ApplyHoldScrollSetting();
 
                 // アンチチート/カスタム無効化リストの変更(トグルON→OFFなど)を、
                 // 次の定期ポーリング(既定3秒間隔)を待たずに即座に反映する。
                 _antiCheatGuard.ForceRecheck();
+                _allowGuard.ForceRecheck();
 
                 ApplyEffectiveBlockState();
             }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _allowGuard.Dispose();
+            }
+            base.Dispose(disposing);
         }
 
         private void OnExit(object? sender, EventArgs e)
